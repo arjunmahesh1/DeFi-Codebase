@@ -1,10 +1,11 @@
 ## Pool ID Selection:
 
 Check token contract: https://etherscan.io/
+Uniswap v3 Subgraph: https://thegraph.com/explorer/subgraphs/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV?view=Query&chain=arbitrum-one
 
 **USDT/USDC**
 
-Query:
+Query for pools:
 
 ```
 {
@@ -24,7 +25,7 @@ Query:
   }
 }
 ```
-Pool IDs:
+Pool IDs Results:
 
 0x3416cf6c708da44db2624d63ea0aaef7113527c6
 - High liquidity/volume
@@ -36,7 +37,7 @@ Pool IDs:
 
 **ETH/USDC**
 
-Query:
+Query for pools:
 
 ```
 {
@@ -56,11 +57,14 @@ Query:
   }
 }
 ```
-Pool IDs:
+Pool IDs Results:
 
 0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640
 - High volume/transaction count
   
 0xe0554a476a092703abdb3ef35c80e0d76d32939f
 - Low liquidity/volume
+
+
+// TODO: Make dynamic pool querying, integrate API key/wallet 
 
