@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+from utils import engineer_features
 
 # Paths for the data
 DATA_DIR = '../data/'
@@ -30,26 +31,31 @@ def parse_data_from_directory(data_type):
 def parse_swaps_data():
     # Parse swaps data from historical-swaps files
     swaps_data = parse_data_from_directory('historical-swaps')
+    print("Swaps data parsed...")
     return swaps_data
 
 def parse_mints_data():
     # Parse mints data from mint files
     mints_data = parse_data_from_directory('mint')
+    print("Mints data parsed...")
     return mints_data
 
 def parse_burns_data():
     # Parse burns data from burn files
     burns_data = parse_data_from_directory('burn')
+    print("Burns data parsed...")
     return burns_data
 
 def parse_daily_pool_data():
     # Parse daily pool data
     daily_pool_data = parse_data_from_directory('daily-pool')
+    print("Daily pool data parsed...")
     return daily_pool_data
 
 def parse_hourly_pool_data():
     # Parse hourly pool data
     hourly_pool_data = parse_data_from_directory('hourly-pool')
+    print("Hourly pool data parsed...")
     return hourly_pool_data
 
 def preprocess_all_data():
@@ -74,13 +80,11 @@ print("\n")
 
 # Convert timestamps method
 def convert_timestamps(df, timestamp_col='timestamp'):
-    # Rename 'date' or 'periodStartUnix' columns to 'timestamp' for consistency
     if 'date' in df.columns:
         df.rename(columns={'date': 'timestamp'}, inplace=True)
     elif 'periodStartUnix' in df.columns:
         df.rename(columns={'periodStartUnix': 'timestamp'}, inplace=True)
 
-    # Convert timestamp column to datetime
     df[timestamp_col] = pd.to_numeric(df[timestamp_col], errors='coerce')
     df[timestamp_col] = pd.to_datetime(df[timestamp_col], unit='s')
     return df
@@ -133,3 +137,16 @@ print("\n")
 print("Hourly pool data head:")
 print(hourly_pool_df.head())
 print("\n")
+
+# Feature Engineering Functions
+print("Feature engineering swaps...")
+engineered_swaps_df = engineer_features(swaps_df)
+print("Feature engineering mints...")
+engineered_mints_df = engineer_features(mints_df)
+print("Feature engineering burns...")
+engineered_burns_df = engineer_features(burns_df)
+print("Feature engineering daily pool...")
+engineered_daily_pool_df = engineer_features(daily_pool_df)
+print("Feature engineering hourly pool...")
+engineered_hourly_pool_df = engineer_features(hourly_pool_df)
+print("Feature engineering complete.")
