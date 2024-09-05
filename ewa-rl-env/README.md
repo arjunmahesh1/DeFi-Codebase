@@ -4,6 +4,8 @@ Check token contract: https://etherscan.io/
 
 Uniswap v3 Subgraph: https://thegraph.com/explorer/subgraphs/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV?view=Query&chain=arbitrum-one
 
+Uniswap v3 Subgraph Schema: https://github.com/Uniswap/v3-subgraph/blob/main/schema.graphql#L75
+
 **USDT/USDC**
 
 Query for pools:
