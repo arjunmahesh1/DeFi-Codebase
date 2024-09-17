@@ -23,7 +23,7 @@ python eval.py
 ```
 
 Check out /notebooks/analysis.ipynb for analysis
-Eta, Episodes can be changed in train.py
+Eta, Episodes can be changed in src/train.py
 
 // TODO: add project explanation, documentation, checkpoints 
 
@@ -36,6 +36,8 @@ Check token contract: https://etherscan.io/
 Uniswap v3 Subgraph: https://thegraph.com/explorer/subgraphs/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV?view=Query&chain=arbitrum-one
 
 Uniswap v3 Subgraph Schema: https://github.com/Uniswap/v3-subgraph/blob/main/schema.graphql#L75
+
+Refer to /data/queries.md for pool subqueries
 
 **USDT/USDC**
 
