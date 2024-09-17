@@ -1,3 +1,34 @@
+## Run Project:
+
+Installation:
+```
+git clone https://github.com/arjunmahesh1/DeFi-Codebase.git
+cd ewa-rl-env
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+```
+cd src
+```
+```
+python preprocess_data.py
+```
+```
+python train.py
+```
+```
+python eval.py
+```
+
+Check out /notebooks/analysis.ipynb for analysis
+Eta, Episodes can be changed in train.py
+
+// TODO: add project explanation, documentation, checkpoints 
+
+
+
 ## Pool ID Selection:
 
 Check token contract: https://etherscan.io/

@@ -1,7 +1,8 @@
 import os
 import json
 import pandas as pd
-from utils import engineer_features
+from utils import engineer_features, calculate_volatility, add_time_features
+from sklearn.model_selection import train_test_split
 
 # Paths for the data
 DATA_DIR = '../data/'
@@ -150,3 +151,34 @@ engineered_daily_pool_df = engineer_features(daily_pool_df)
 print("Feature engineering hourly pool...")
 engineered_hourly_pool_df = engineer_features(hourly_pool_df)
 print("Feature engineering complete.")
+
+
+# Enhance hourly pool data to include columns for environment
+
+engineered_hourly_pool_df['price'] = pd.to_numeric(engineered_hourly_pool_df['token0Price'], errors='coerce')
+engineered_hourly_pool_df['volume'] = pd.to_numeric(engineered_hourly_pool_df['volumeUSD'], errors='coerce')
+
+if 'volatility' not in engineered_hourly_pool_df.columns:
+    engineered_hourly_pool_df = calculate_volatility(engineered_hourly_pool_df, price_col='price')
+
+if 'hour' not in engineered_hourly_pool_df.columns or 'day_of_week' not in engineered_hourly_pool_df.columns:
+    engineered_hourly_pool_df = add_time_features(engineered_hourly_pool_df, timestamp_col='timestamp')
+
+final_columns = ['timestamp', 'price', 'volume', 'volatility', 'liquidity', 'feesUSD', 'hour', 'day_of_week']
+engineered_hourly_pool_df = engineered_hourly_pool_df[final_columns]
+
+engineered_hourly_pool_df.dropna(subset=final_columns, inplace=True)
+engineered_hourly_pool_df.reset_index(drop=True, inplace=True)
+
+engineered_hourly_pool_df.to_csv('../data/engineered_hourly_pool_df.csv', index=False)
+print("Engineered hourly pool data saved to '../data/engineered_hourly_pool_df.csv'")
+
+train_data, test_data = train_test_split(engineered_hourly_pool_df, test_size=0.2, shuffle=False)
+
+# Save splitted data
+train_data.to_csv('../data/train_data.csv', index=False)
+test_data.to_csv('../data/test_data.csv', index=False)
+
+print("Data has been split into training and testing sets.")
+print("Training data saved to '../data/train_data.csv'")
+print("Testing data saved to '../data/test_data.csv'")

@@ -1,3 +1,4 @@
+# RL environment
 
 import gym
 from gym import spaces
@@ -94,7 +95,10 @@ class UniswapEnv(gym.Env):
         current_row = self.data.iloc[self.current_step]
         next_row = self.data.iloc[min(self.current_step + 1, self.n_steps - 1)]
 
-        price_in_interval = (current_row['price'] >= price_interval[0] and current_row['price'] <= price_interval[1])
+        current_price = current_row['price']
+        next_price = next_row['price']
+
+        price_in_interval = (current_price >= price_interval[0]) and (current_price <= price_interval[1])
 
         if price_in_interval:
             volume_fraction = self._calculate_volume_fraction(price_interval)
@@ -102,9 +106,9 @@ class UniswapEnv(gym.Env):
         else:
             fees_earned = 0.0
 
-        price_change = next_row['price'] - current_row['price']
         if price_in_interval:
-            position_value_change = liquidity_amount * (price_change / current_row['price'])
+            price_change = next_price - current_price
+            position_value_change = liquidity_amount * (price_change / current_price)
         else:
             position_value_change = 0.0
 
@@ -124,6 +128,6 @@ class UniswapEnv(gym.Env):
     def render(self, mode='human'):
         print(
             f"Step: {self.current_step}, Balance: {self.balance:.2f}, "
-            f"Positon Value: {self.position_value:.2f}, Total Rewards: {self.total_rewards:.2f}"
+            f"Position Value: {self.position_value:.2f}, Total Rewards: {self.total_rewards:.2f}"
         )
 
