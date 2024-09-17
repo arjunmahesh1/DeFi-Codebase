@@ -25,6 +25,8 @@ python eval.py
 Check out /notebooks/analysis.ipynb for analysis
 Eta, Episodes can be changed in src/train.py
 
+Env created using (OpenAI Gym)[https://www.gymlibrary.dev/api/core/]
+
 // TODO: add project explanation, documentation, checkpoints 
 
 
