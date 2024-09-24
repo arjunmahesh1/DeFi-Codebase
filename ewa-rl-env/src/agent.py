@@ -24,6 +24,11 @@ class Agent:
         return action, action_index
     
     def update_probabilities(self, action_index, reward):
+        # update to use Kronecker delta
+        # delta = np.zeros[self.N_actions]
+        # delta[action_taken] = 1
+        # weights *= np.exp(self.eta * self.cumulative_rewards * delta)
+        
         self.cumulative_rewards[action_index] += reward
         exponentiated_rewards = np.exp(self.eta * self.cumulative_rewards)
         self.probabilities = exponentiated_rewards / np.sum(exponentiated_rewards)

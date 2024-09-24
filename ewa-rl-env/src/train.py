@@ -5,7 +5,7 @@ import pandas as pd
 from environment import UniswapEnv
 from agent import Agent
 
-def train_agent(data, num_episodes=10, eta=0.1):
+def train_agent(data, num_episodes=100, eta=0.1):
     env = UniswapEnv(data)
     agent = Agent(env, eta=eta)
     
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     print("First few rows:")
     print(data.head())
 
-    trained_agent = train_agent(data, num_episodes=10, eta=0.1)
+    trained_agent = train_agent(data, num_episodes=100, eta=0.1)
     np.save('../models/agent_probabilities.npy', trained_agent.probabilities)
     print("Agent's action probabilities saved to '../models/agent_probabilities.npy'")
 

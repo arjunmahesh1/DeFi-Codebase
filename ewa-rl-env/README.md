@@ -1,3 +1,5 @@
+Purpose: Adapt (Uniswap Liquidity Provision: An Online Learning Approach)[https://arxiv.org/pdf/2302.00610] as a Markov Decision Process, which might deal with the non-stationary nature of markets better and provide insights for LPs.
+
 ## Run Project:
 
 Installation:
