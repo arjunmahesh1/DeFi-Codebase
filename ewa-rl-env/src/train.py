@@ -3,11 +3,11 @@
 import numpy as np
 import pandas as pd
 from environment import UniswapEnv
-from agent import Agent
+from agent import EWAAgent
 
 def train_agent(data, num_episodes=100, eta=0.1):
     env = UniswapEnv(data)
-    agent = Agent(env, eta=eta)
+    agent = EWAAgent(env, eta=eta)
     
     results = []
 

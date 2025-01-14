@@ -55,6 +55,9 @@ def engineer_features(df):
     if 'liquidity' in df.columns and 'feesUSD' in df.columns:
         df = add_liquidity_and_fees(df)
 
+    if 'price' in df.columns:
+        df = calculate_volatility(df, price_col='price')
+
     if 'timestamp' in df.columns:
         df = add_time_features(df)
 

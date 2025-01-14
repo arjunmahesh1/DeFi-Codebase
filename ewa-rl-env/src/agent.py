@@ -1,8 +1,17 @@
 # Implement RL agent
 
 import numpy as np
+try:
+    from stable_baselines3 import PPO, DQN
+    from stable_baselines3.common.vec_env import DummyVecEnv
+except ImportError:
+    PPO = None
+    DQN = None
+    DummyVecEnv = None
+    print("Install Stable Baselines with 'pip install stable-baselines3' to use agent.")
 
-class Agent:
+# EWA Agent
+class EWAAgent:
     def __init__(self, env, eta=0.1):
         self.env = env
         self.eta = eta  # EWA learning rate parameter
@@ -17,6 +26,8 @@ class Agent:
             for j in range(env.M_liquidity_levels):
                 self.action_space.append((i,j))
 
+        self.name = "EWAAgent_eta{}".format(eta)
+
     def select_action(self):
         action_index = np.random.choice(self.N_actions, p=self.probabilities)
         action = self.action_space[action_index]
@@ -24,11 +35,6 @@ class Agent:
         return action, action_index
     
     def update_probabilities(self, action_index, reward):
-        # update to use Kronecker delta
-        # delta = np.zeros[self.N_actions]
-        # delta[action_taken] = 1
-        # weights *= np.exp(self.eta * self.cumulative_rewards * delta)
-        
         self.cumulative_rewards[action_index] += reward
         exponentiated_rewards = np.exp(self.eta * self.cumulative_rewards)
         self.probabilities = exponentiated_rewards / np.sum(exponentiated_rewards)
@@ -36,3 +42,162 @@ class Agent:
     def reset(self):
         self.cumulative_rewards = np.zeros(self.N_actions)
         self.probabilities = np.ones(self.N_actions) / self.N_actions
+
+
+# Passive Agent
+class NoRebalanceStrategy:
+    def __init__(self, env):
+        self.env = env
+        self.name = "NoRebalance"
+
+        self.fixed_action = (env.N_price_intervals - 1, env.M_liquidity_levels - 1)     # Widest interval, 100% liquidity
+        self.fixed_action_index = (env.N_price_intervals - 1) * env.M_liquidity_levels + (env.M_liquidity_levels - 1)
+
+    def select_action(self):
+        return self.fixed_action, self.fixed_action_index
+
+    def update_probabilities(self, action_index, reward):
+        pass  
+
+    def reset(self):
+        pass
+
+
+# Fixed Interval Strategy Agent
+class FixedIntervalStrategy:
+    """
+    Always place liquidity in a certain fraction of the price around the current price.
+    """
+    def __init__(self, env, width_pct=0.05):
+        self.env = env
+        self.width_pct = width_pct
+        self.name = "FixedInterval_width{}".format(width_pct)
+
+        self.liquidity_idx = env.M_liquidity_levels - 1  # always full
+
+    def select_action(self):
+        current_price = self.env.data.iloc[self.env.current_step]['price']
+        lower = current_price * (1.0 - self.width_pct)
+        upper = current_price * (1.0 + self.width_pct)
+
+        best_idx = None
+        best_cover = 0
+        for i, (low_i, up_i) in enumerate(self.env.price_intervals):
+            cover = min(upper, up_i) - max(lower, low_i)
+            if cover > best_cover:
+                best_cover = cover
+                best_idx = i
+
+        if best_idx is None:
+            best_idx = 0  
+
+        action = (best_idx, self.liquidity_idx)
+        action_index = best_idx * self.env.M_liquidity_levels + self.liquidity_idx
+        return action, action_index
+
+    def update_probabilities(self, action_index, reward):
+        pass  # No learning (static)
+
+    def reset(self):
+        pass
+
+
+# Reset Agent (Variation of 'Concentrated Liquidity in AMMs' paper)
+class ResetIntervalStrategy:
+    def __init__(self, env, width_pct=0.05):
+        self.env = env
+        self.width_pct = width_pct
+        self.name = "ResetInterval_width{}".format(width_pct)
+
+        self.current_lower = None
+        self.current_upper = None
+        self.action_idx = None
+
+    def select_action(self):
+        current_price = self.env.data.iloc[self.env.current_step]['price']
+        if (self.current_lower is None) or (current_price < self.current_lower) or (current_price > self.current_upper):
+            self.current_lower = current_price * (1.0 - self.width_pct)
+            self.current_upper = current_price * (1.0 + self.width_pct)
+
+            best_idx = None
+            best_cover = 0
+            for i, (low_i, up_i) in enumerate(self.env.price_intervals):
+                cover = min(self.current_upper, up_i) - max(self.current_lower, low_i)
+                if cover > best_cover:
+                    best_cover = cover
+                    best_idx = i
+
+            liquidity_idx = self.env.M_liquidity_levels - 1     # 100% liquidity
+            self.action_idx = (best_idx, liquidity_idx)
+
+        action = self.action_idx
+        a_idx = action[0] * self.env.M_liquidity_levels + action[1]
+        return action, a_idx
+
+    def update_probabilities(self, action_index, reward):
+        pass
+
+    def reset(self):
+        self.current_lower = None
+        self.current_upper = None
+        self.action_idx = None
+
+
+# TODO: Stable Baselines Agent
+# class StableBaselinesAgent:
+#     def __init__(self, env, algo="PPO", timesteps=5000):
+#         self.env = env
+#         self.name = f"StableBaselines_{algo}"
+#         self.algo = algo
+#         self.timesteps = timesteps
+#         self.model = None
+
+#     def train(self):
+#         # Convert to a Vectorized environment for SB3
+#         if DummyVecEnv is None:
+#             raise ImportError("Please install stable-baselines3 to use this agent.")
+
+#         def make_env():
+#             # Re-init a fresh environment for stable-baselines (careful with data usage)
+#             return self.env
+        
+#         vec_env = DummyVecEnv([make_env])
+        
+#         if self.algo == "PPO":
+#             self.model = PPO("MlpPolicy", vec_env, verbose=0)
+#         elif self.algo == "DQN":
+#             self.model = DQN("MlpPolicy", vec_env, verbose=0)
+#         else:
+#             raise ValueError("Unsupported algo for demonstration.")
+        
+#         # Train
+#         self.model.learn(total_timesteps=self.timesteps)
+
+#     def select_action(self):
+#         obs = self.env._get_observation()  # or however we retrieve the latest obs
+#         # The env step method expects (discrete) action in the form (i, j). 
+#         # But SB3 typically returns a single integer if MultiDiscrete, or a float if Box.
+#         # We'll get the raw action from the model:
+#         action, _states = self.model.predict(obs, deterministic=True)
+
+#         # action might be an array of shape (2, ) if the env has MultiDiscrete(10,5).
+#         # So let's parse it properly:
+#         if isinstance(action, np.ndarray) and len(action) == 2:
+#             price_idx, liq_idx = action
+#         else:
+#             # Fallback in case DQN returns an integer, or something else. 
+#             # (SB3 does handle MultiDiscrete, but be sure to set it up properly.)
+#             price_idx = int(action // self.env.M_liquidity_levels)
+#             liq_idx = int(action % self.env.M_liquidity_levels)
+
+#         action_idx = price_idx * self.env.M_liquidity_levels + liq_idx
+#         return (price_idx, liq_idx), action_idx
+    
+#     def update_probabilities(self, action_index, reward):
+#         # Not applicable for SB3. We rely on internal RL updates.
+#         pass
+
+#     def reset(self):
+#         # Possibly re-train or just do nothing. 
+#         # Usually you call train() once before evaluating.
+#         pass

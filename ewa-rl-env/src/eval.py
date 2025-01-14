@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 from environment import UniswapEnv
-from agent import Agent
+from agent import EWAAgent
 
 def evaluate_agent(agent, data):
     state = env.reset()
@@ -47,12 +47,12 @@ if __name__ == "__main__":
     data.reset_index(drop=True, inplace=True)
 
     env = UniswapEnv(data)
-    agent = Agent(env)
+    agent = EWAAgent(env)
     agent.probabilities = np.load('../models/agent_probabilities.npy')
 
     def no_update_probabilities(self, action_index, reward):
         pass  
 
-    agent.update_probabilities = no_update_probabilities.__get__(agent, Agent)
+    agent.update_probabilities = no_update_probabilities.__get__(agent, EWAAgent)
 
     evaluate_agent(agent, data)
