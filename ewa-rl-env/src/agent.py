@@ -1,6 +1,8 @@
 # Implement RL agent
 
 import numpy as np
+import math
+from math import log
 try:
     from stable_baselines3 import PPO, DQN
     from stable_baselines3.common.vec_env import DummyVecEnv
@@ -16,15 +18,16 @@ class EWAAgent:
         self.env = env
         self.eta = eta  # EWA learning rate parameter
 
-        self.N_actions = env.N_price_intervals * env.M_liquidity_levels
+        self.N_actions = env.num_tick_choices * env.num_tick_choices * env.M_liquidity_levels
 
         self.cumulative_rewards = np.zeros(self.N_actions)
         self.probabilities = np.ones(self.N_actions) / self.N_actions
 
         self.action_space = []
-        for i in range(env.N_price_intervals):
-            for j in range(env.M_liquidity_levels):
-                self.action_space.append((i,j))
+        for lower_idx in range(env.num_tick_choices):
+            for upper_idx in range(env.num_tick_choices):
+                for liq_idx in range(env.M_liquidity_levels):
+                    self.action_space.append((lower_idx, upper_idx, liq_idx))
 
         self.name = "EWAAgent_eta{}".format(eta)
 
@@ -36,8 +39,17 @@ class EWAAgent:
     
     def update_probabilities(self, action_index, reward):
         self.cumulative_rewards[action_index] += reward
-        exponentiated_rewards = np.exp(self.eta * self.cumulative_rewards)
-        self.probabilities = exponentiated_rewards / np.sum(exponentiated_rewards)
+
+        scaled_rewards = self.eta * self.cumulative_rewards
+        max_scaled = np.max(scaled_rewards)
+        shifted = scaled_rewards - max_scaled
+
+        exponentiated = np.exp(shifted)
+        denom = np.sum(exponentiated)
+        if denom == 0:
+            self.probabilities = np.ones_like(exponentiated) / len(exponentiated)
+        else:
+            self.probabilities = exponentiated / denom
 
     def reset(self):
         self.cumulative_rewards = np.zeros(self.N_actions)
@@ -50,8 +62,15 @@ class NoRebalanceStrategy:
         self.env = env
         self.name = "NoRebalance"
 
-        self.fixed_action = (env.N_price_intervals - 1, env.M_liquidity_levels - 1)     # Widest interval, 100% liquidity
-        self.fixed_action_index = (env.N_price_intervals - 1) * env.M_liquidity_levels + (env.M_liquidity_levels - 1)
+        mid_idx = env.num_tick_choices // 2
+        liq_move_idx = 0
+        
+        self.fixed_action = (mid_idx, mid_idx, liq_move_idx)
+        self.fixed_action_index = (
+            mid_idx * env.num_tick_choices * env.M_liquidity_levels 
+            + mid_idx * env.M_liquidity_levels 
+            + liq_move_idx
+        )
 
     def select_action(self):
         return self.fixed_action, self.fixed_action_index
@@ -77,22 +96,34 @@ class FixedIntervalStrategy:
 
     def select_action(self):
         current_price = self.env.data.iloc[self.env.current_step]['price']
-        lower = current_price * (1.0 - self.width_pct)
-        upper = current_price * (1.0 + self.width_pct)
+        current_tick_float = log(current_price, 1.0001)
 
-        best_idx = None
-        best_cover = 0
-        for i, (low_i, up_i) in enumerate(self.env.price_intervals):
-            cover = min(upper, up_i) - max(lower, low_i)
-            if cover > best_cover:
-                best_cover = cover
-                best_idx = i
+        lower_price = current_price * (1.0 - self.width_pct)
+        upper_price = current_price * (1.0 + self.width_pct)
 
-        if best_idx is None:
-            best_idx = 0  
+        lower_tick_float = log(lower_price, 1.0001)
+        upper_tick_float = log(upper_price, 1.0001)
 
-        action = (best_idx, self.liquidity_idx)
-        action_index = best_idx * self.env.M_liquidity_levels + self.liquidity_idx
+        # Approximate index
+        def map_tick_to_index(tick_value):
+            offset = (tick_value - self.env.min_tick) / self.env.tick_step
+            idx = int(max(0, min(self.env.num_tick_choices - 1, offset)))
+
+            return idx
+
+        lower_idx = map_tick_to_index(lower_tick_float)
+        upper_idx = map_tick_to_index(upper_tick_float)
+
+        liq_move_idx = 2
+
+        action = (lower_idx, upper_idx, liq_move_idx)
+
+        action_index = (
+            lower_idx * self.env.num_tick_choices * self.env.M_liquidity_levels
+            + upper_idx * self.env.M_liquidity_levels
+            + liq_move_idx
+        )
+
         return action, action_index
 
     def update_probabilities(self, action_index, reward):
@@ -119,19 +150,28 @@ class ResetIntervalStrategy:
             self.current_lower = current_price * (1.0 - self.width_pct)
             self.current_upper = current_price * (1.0 + self.width_pct)
 
-            best_idx = None
-            best_cover = 0
-            for i, (low_i, up_i) in enumerate(self.env.price_intervals):
-                cover = min(self.current_upper, up_i) - max(self.current_lower, low_i)
-                if cover > best_cover:
-                    best_cover = cover
-                    best_idx = i
+            lower_tick_float = math.log(self.current_lower, 1.0001)
+            upper_tick_float = math.log(self.current_upper, 1.0001)
 
-            liquidity_idx = self.env.M_liquidity_levels - 1     # 100% liquidity
-            self.action_idx = (best_idx, liquidity_idx)
+            def map_tick_to_index(tick_val):
+                offset = (tick_val - self.env.min_tick) / self.env.tick_step
+                idx = int(max(0, min(self.env.num_tick_choices - 1, offset)))
+                return idx
+
+            lower_idx = map_tick_to_index(lower_tick_float)
+            upper_idx = map_tick_to_index(upper_tick_float)
+
+            liquidity_idx = self.env.M_liquidity_levels - 1
+
+            self.action_idx = (lower_idx, upper_idx, liquidity_idx)
 
         action = self.action_idx
-        a_idx = action[0] * self.env.M_liquidity_levels + action[1]
+        (l_i, u_i, liq_i) = action
+        a_idx = (
+            l_i * self.env.num_tick_choices * self.env.M_liquidity_levels
+            + u_i * self.env.M_liquidity_levels
+            + liq_i
+        )
         return action, a_idx
 
     def update_probabilities(self, action_index, reward):
