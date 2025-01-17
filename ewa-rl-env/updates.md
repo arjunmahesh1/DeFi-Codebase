@@ -6,7 +6,7 @@
 
 #### Bonding-Curve Slippage Math
 - v1: slippage as a %
-- TODO: simplified version of Uniswap v3 formula: sqrt(p') = sqrt(p) + delta(x)/L
+- current: simplified version of Uniswap v3 formula: sqrt(p') = sqrt(p) + delta(x)/L
 - TODO: track amount0, amount1 in the pool position, each swap changes these, range checks, separate logic for mint v. burn
 
 #### Handling In-Range v. Out-of-Range Liquidity

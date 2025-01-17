@@ -12,6 +12,22 @@ def tick_to_price(tick):
 def price_to_tick(price):
     return int(math.log(price, 1.0001))
 
+def simulate_swap(delta_x, sqrt_price, L):
+    """
+    Bonding Curve: p' = (sqrt(p) + delta_x / L)^2
+    return final price p', average execution price, tokens_in, tokens_out, etc.
+    """
+    sqrt_p_initial = sqrt_price
+    sqrt_p_final = sqrt_p_initial + (delta_x / L)
+    if sqrt_p_final <= 0:
+        sqrt_p_final = 1e-9
+    
+    p_final = sqrt_p_final**2
+    avg_price = (sqrt_p_initial + sqrt_p_final) / 2.0       # Approximation: for a small delta_x, avg = near midpoint
+                                                            # Integral Approach: integral p dp from sqrt_p_initial to sqrt_p_final
+
+    return p_final, avg_price
+
 class UniswapEnv(gym.Env):
     def __init__(
         self, 
@@ -41,7 +57,7 @@ class UniswapEnv(gym.Env):
 
         # Discrete Tick Choices (adjustable increments)
         self.tick_step = 60
-        self.num_tick_choices = (self.max_tick - self.min_tick) // self.tick_step
+        self.num_tick_choices = max(1,(self.max_tick - self.min_tick) // self.tick_step)
 
         # Action space: MultiDiscrete space for price interval and liquidity level
         self.action_space = spaces.MultiDiscrete([
@@ -66,6 +82,8 @@ class UniswapEnv(gym.Env):
         self.position_value = 0.0
         self.total_rewards = 0.0
 
+        self.sqrt_price_pool = math.sqrt(self.data['price'].iloc[0])
+
         # Slippage & Gas Parameters
         self.gas_fee = gas_fee
         self.slippage_rate = slippage_rate
@@ -76,6 +94,7 @@ class UniswapEnv(gym.Env):
         self.liquidity_in_pool = 0.0
         self.position_value = 0.0
         self.total_rewards = 0.0
+        self.sqrt_price_pool = math.sqrt(self.data['price'].iloc[0])
 
         return self._get_observation()
     
@@ -178,38 +197,41 @@ class UniswapEnv(gym.Env):
         """Compare the current price to the chosen (self.lower_price, self.upper_price).
         If in range, earn fees + price changes. Otherwise, 0 fees or no price gain."""
 
+        if self.liquidity_in_pool <= 0:
+            self.position_value = 0.0
+            
+            return 0.0
+
         current_row = self.data.iloc[self.current_step]
         next_row = self.data.iloc[min(self.current_step + 1, self.n_steps - 1)]
 
-        current_price = current_row['price']
-        next_price = next_row['price']
+        current_price_market = current_row['price']
+        next_price_market = next_row['price']
 
-        if self.liquidity_in_pool <= 0:
-            self.position_value = 0.0
+        in_range = (current_price_market >= self.lower_price) and (current_price_market <= self.upper_price) 
+        if not in_range:
+            self.position_value = self.liquidity_in_pool
+
             return 0.0
+        
+        # Simulation of pool reaction to swap volume: assumption that a fraction of volume is trading with pool
+        pool_share = (self.liquidity_in_pool / self.initial_balance)
+        volume_traded = current_row['volume'] * pool_share      # Approximation
+        token0_in = volume_traded / current_price_market        # Approximation
 
-        in_range = (current_price >= self.lower_price) and (current_price <= self.upper_price) 
+        p_before = self.sqrt_price_pool
+        L = 1e6         # Liquidity Param
+        p_final, avg_exec = simulate_swap(token0_in, p_before, L)
+        self.sqrt_price_pool = p_final
 
         # TRADING FEES: if the price is in the chose interval, earn fees
         # TODO: simplification compared to Uniswap V3
-        if in_range:
-            total_range = self.upper_price - self.lower_price
-            if total_range <= 0:
-                fees_earned = 0.0
-            else:
-                interval_fraction = (next_price - current_price) / total_range      # TODO?
-                volume_fraction = (self.upper_price - self.lower_price) / (self.data['price'].max() - self.data['price'].min())
-                fees_earned = volume_fraction * current_row['volume'] * 0.003 * (self.liquidity_in_pool / self.initial_balance)
-        else:
-            fees_earned = 0.0
+        fees_earned = 0.003 * volume_traded * (self.liquidity_in_pool / self.initial_balance)
 
-        # PRICE CHANGE
+        # IMPERMANENT LOSS FROM PRICE MOVEMENT
         # TODO: simplification compared to Uniswap V3
-        if in_range:
-            price_change = (next_price - current_price) / current_price
-            position_value_change = self.liquidity_in_pool * price_change
-        else:
-            position_value_change = 0.0
+        price_change_fraction = (next_price_market - current_price_market) / current_price_market
+        position_value_change = self.liquidity_in_pool * price_change_fraction
 
         
         delta_pool_value = fees_earned + position_value_change
@@ -221,6 +243,7 @@ class UniswapEnv(gym.Env):
     def render(self, mode='human'):
         print(
             f"Step: {self.current_step}, Balance: {self.balance:.2f}, "
-            f"Position Value: {self.position_value:.2f}, Total Rewards: {self.total_rewards:.2f}"
+            f"Pool: {self.liquidity_in_pool:.2f}, Position: {self.position_value:.2f}, "
+            f"Total Rewards: {self.total_rewards:.2f}"
         )
 
