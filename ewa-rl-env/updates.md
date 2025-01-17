@@ -1,4 +1,13 @@
 ## Project Updates
+
+Currently Working on:
+- Environment Updates (see below)
+
+TODO:
+- Upgrade strategy comparison framework + add strategies
+- Train/Eval splits
+- Fix learned probabilities
+
 #### Representing Ticks/Ranges
 - v1: historical price range / N-price-intervals 
 - v2: two-balance approach

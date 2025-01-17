@@ -1,13 +1,5 @@
 Purpose: Adapt [Uniswap Liquidity Provision: An Online Learning Approach](https://arxiv.org/pdf/2302.00610) as a Markov Decision Process, which might deal with the non-stationary nature of markets better and provide insights for LPs.
 
-## Currently Working on:
-Environment Updates
-## TODO:
-Upgrade strategy comparison framework + add strategies
-Train/Eval splits
-Fix learned probabilities
-
-
 ## Run Project:
 
 Installation:
@@ -115,4 +107,9 @@ Pool IDs Results:
 
 
 // TODO: Make dynamic pool querying, integrate API key/wallet 
+
+
+### Hardware:
+- Surface Laptop 3
+- Intel Core i7-1065G7 Processor
 
