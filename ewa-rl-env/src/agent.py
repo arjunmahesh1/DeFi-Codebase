@@ -40,11 +40,10 @@ class EWAAgent:
     def update_probabilities(self, action_index, reward):
         self.cumulative_rewards[action_index] += reward
 
-        scaled_rewards = self.eta * self.cumulative_rewards
-        max_scaled = np.max(scaled_rewards)
-        shifted = scaled_rewards - max_scaled
-
-        exponentiated = np.exp(shifted)
+        scaled = np.clip(self.eta * self.cumulative_rewards, -700, 700)
+        shifted = scaled - scaled.max()          # subtract max *after* clip
+        exponentiated = np.exp(shifted)            
+        
         denom = np.sum(exponentiated)
         if denom == 0:
             self.probabilities = np.ones_like(exponentiated) / len(exponentiated)

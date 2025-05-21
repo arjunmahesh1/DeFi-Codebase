@@ -1,58 +1,32 @@
-# Evaluation script
-
-import pandas as pd
-import numpy as np
+import pandas as pd, numpy as np, json, pickle
 from environment import UniswapEnv
 from agent import EWAAgent
+from pathlib import Path
 
-def evaluate_agent(agent, data):
-    state = env.reset()
-    done = False
-    total_reward = 0.0
-    step = 0
-    results = []
+DATA_DIR  = Path("../data")
+MODEL_DIR = Path("../models")
 
-    while not done:
-        # Agent selects action based on learned policy
-        action, action_index = agent.select_action()
+# load test data
+data = pd.read_csv(DATA_DIR/"test_data.csv")
 
-        # Environment returns next state and reward
-        next_state, reward, done, info = env.step(action)
+# recreate training action space & probs
+action_space = np.load(MODEL_DIR/"agent_action_space.npy", allow_pickle=True)
+prob         = np.load(MODEL_DIR/"agent_probabilities.npy")
 
-        total_reward += reward
-        step += 1
+# build env – feed test_data
+env = UniswapEnv(data)
 
-        results.append({
-            'step': step,
-            'action': action,
-            'balance': env.balance,
-            'position_value': env.position_value,
-            'total_rewards': total_reward
-        })
+# stitch agent
+agent = EWAAgent(env, eta=0.1)
+agent.action_space = list(action_space)
+agent.N_actions    = len(agent.action_space)
+agent.probabilities = prob
+assert len(prob) == agent.N_actions
 
-        state = next_state
-
-    results_df = pd.DataFrame(results)
-    results_df.to_csv('../results/evaluation_results.csv', index=False)
-    print(f"Evaluation completed. Total reward: {total_reward:.2f}")
-    print("Evaluation results saved to '../results/evaluation_results.csv'")
-
-if __name__ == "__main__":
-    data = pd.read_csv('../data/test_data.csv')
-
-    numeric_columns = ['price', 'volume', 'volatility', 'liquidity', 'feesUSD']
-    for col in numeric_columns:
-        data[col] = pd.to_numeric(data[col], errors='coerce')
-    data.dropna(subset=numeric_columns + ['hour', 'day_of_week'], inplace=True)
-    data.reset_index(drop=True, inplace=True)
-
-    env = UniswapEnv(data)
-    agent = EWAAgent(env)
-    agent.probabilities = np.load('../models/agent_probabilities.npy')
-
-    def no_update_probabilities(self, action_index, reward):
-        pass  
-
-    agent.update_probabilities = no_update_probabilities.__get__(agent, EWAAgent)
-
-    evaluate_agent(agent, data)
+# roll evaluation
+state, done, total = env.reset(), False, 0
+while not done:
+    act, idx = agent.select_action()
+    state, rew, done, info = env.step(act)
+    total += rew
+print(f"Total reward (test set): {total:.2f}")

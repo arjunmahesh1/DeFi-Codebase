@@ -176,6 +176,7 @@ class UniswapEnv(gym.Env):
                 net_deposit = deposit_amount - total_cost
                 self.balance -= deposit_amount
                 self.liquidity_in_pool += net_deposit
+                self.liquidity_in_pool = min(self.liquidity_in_pool, 10 * self.initial_balance)  # Cap pool size to 10x initial balance
 
         elif fraction < 0:
             # withdraw from the pool
@@ -215,7 +216,8 @@ class UniswapEnv(gym.Env):
             return 0.0
         
         # Simulation of pool reaction to swap volume: assumption that a fraction of volume is trading with pool
-        pool_share = (self.liquidity_in_pool / self.initial_balance)
+        total_liq  = current_row["liquidity"] or 1e18 
+        pool_share = np.clip(self.liquidity_in_pool / total_liq, 0, 1)
         volume_traded = current_row['volume'] * pool_share      # Approximation
         token0_in = volume_traded / current_price_market        # Approximation
 
@@ -226,7 +228,8 @@ class UniswapEnv(gym.Env):
 
         # TRADING FEES: if the price is in the chose interval, earn fees
         # TODO: simplification compared to Uniswap V3
-        fees_earned = 0.003 * volume_traded * (self.liquidity_in_pool / self.initial_balance)
+        fee_tier = 0.0005          # 0.05 % ≈ popular ETH/USDC pool
+        fees_earned = fee_tier * volume_traded
 
         # IMPERMANENT LOSS FROM PRICE MOVEMENT
         # TODO: simplification compared to Uniswap V3
@@ -235,7 +238,11 @@ class UniswapEnv(gym.Env):
 
         
         delta_pool_value = fees_earned + position_value_change
-        self.liquidity_in_pool += delta_pool_value
+        self.liquidity_in_pool = np.clip(
+            self.liquidity_in_pool + delta_pool_value,
+            0,
+            10 * self.initial_balance
+        )
         self.position_value = self.liquidity_in_pool
 
         return delta_pool_value
