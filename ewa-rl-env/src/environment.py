@@ -92,6 +92,9 @@ class UniswapEnv(gym.Env):
         # Slippage & Gas Parameters
         self.gas_fee = gas_fee
         self.slippage_rate = slippage_rate
+
+        self.token0_in_pool = 0.0
+        self.token1_in_pool = 0.0
     
     def reset(self):
         self.current_step = 0
@@ -166,38 +169,52 @@ class UniswapEnv(gym.Env):
         }
         fraction = moves.get(liquidity_move_idx, 0.0)
 
+        if fraction == 0.0:
+            return
+        
+        # DEPOSIT
         if fraction > 0:  
-            deposit_amount = self.balance * fraction
-            if deposit_amount > 0:
-                # SLIPPAGE AND GAS COSTS
-                # TODO : Enhanced slippage modeling, approximate gas costs in Gwei
-                slippage_cost = self.slippage_rate * deposit_amount
-                total_cost = slippage_cost + self.gas_fee
+            usd_deposit = self.balance * fraction
+            slippage = self.slippage_rate * usd_deposit
+            gas_usd = self.gas_fee                    
+            if usd_deposit <= slippage + gas_usd:
+                return                                    # nothing left after costs
 
-                if deposit_amount <= total_cost:
-                    return
+            net_usd = usd_deposit - (slippage + gas_usd)
 
-                # Move net deposit into pool
-                net_deposit = deposit_amount - total_cost
-                self.balance -= deposit_amount
-                self.liquidity_in_pool += net_deposit
-                self.liquidity_in_pool = min(self.liquidity_in_pool, 10 * self.initial_balance)  # Cap pool size to 10x initial balance
+            # split 50 / 50 in value into token0 & token1
+            p = self.data.loc[self.current_step, "price"]       # token1/token0
+            token0_amt = net_usd / (2 * p)                      # value half in token0
+            token1_amt = net_usd / 2                            # value half in token1
 
-        elif fraction < 0:
-            # withdraw from the pool
-            portion = abs(fraction)
-            withdraw_amount = self.liquidity_in_pool * portion
-            if withdraw_amount > 0:
-                slippage_cost = self.slippage_rate * withdraw_amount
-                total_cost = slippage_cost + self.gas_fee
-                if withdraw_amount <= total_cost:
-                    return
+            self.token0_in_pool += token0_amt
+            self.token1_in_pool += token1_amt
 
-                net_withdraw = withdraw_amount - total_cost
-                self.liquidity_in_pool -= withdraw_amount
-                self.balance += net_withdraw
+            self.balance -= usd_deposit
+            self.position_value = self.token0_in_pool * p + self.token1_in_pool
+
+        # WITHDRAW
         else:
-            pass
+            portion = abs(frac)
+
+            # withdraw proportionally from BOTH token balances
+            token0_out = self.token0_in_pool * portion
+            token1_out = self.token1_in_pool * portion
+
+            p = self.data.loc[self.current_step, "price"]
+            usd_withdraw = token0_out * p + token1_out
+            slippage = self.slippage_rate * usd_withdraw
+            gas_usd = self.gas_fee
+            if usd_withdraw <= slippage + gas_usd:
+                return
+
+            # burn LP position
+            self.token0_in_pool -= token0_out
+            self.token1_in_pool -= token1_out
+
+            net_usd = usd_withdraw - (slippage + gas_usd)
+            self.balance += net_usd
+            self.position_value = self.token0_in_pool * p + self.token1_in_pool
     
     def _calculate_reward(self):
         """Compare the current price to the chosen (self.lower_price, self.upper_price).
