@@ -217,57 +217,67 @@ class UniswapEnv(gym.Env):
             self.position_value = self.token0_in_pool * p + self.token1_in_pool
     
     def _calculate_reward(self):
-        """Compare the current price to the chosen (self.lower_price, self.upper_price).
-        If in range, earn fees + price changes. Otherwise, 0 fees or no price gain."""
+        """
+        Reward_t =   (Δ position value)        # mark-to-market P&L
+                + fees_earned_usd              # swap fees we earned
+                – gas_cost_usd                 # execution cost
+        Position value is token0*P + token1.
+        """
 
-        if self.liquidity_in_pool <= 0:
+        # Guard: no liquidity => no reward
+        if self.token0_in_pool == 0 and self.token1_in_pool == 0:
             self.position_value = 0.0
-            
+
             return 0.0
 
-        current_row = self.data.iloc[self.current_step]
+        # Grab current / next market prices and pool liquidity (L)
+        cur_row = self.data.iloc[self.current_step]
         next_row = self.data.iloc[min(self.current_step + 1, self.n_steps - 1)]
 
-        current_price_market = current_row['price']
-        next_price_market = next_row['price']
+        P_t = float(cur_row["price"])          # token1 per token0
+        P_t1 = float(next_row["price"])
+        sqrtP_t = math.sqrt(P_t)
 
-        in_range = (current_price_market >= self.lower_price) and (current_price_market <= self.upper_price) 
-        if not in_range:
-            self.position_value = self.liquidity_in_pool
+        L_pool   = float(cur_row["liquidity"])      # on-chain total liquidity
+        if L_pool <= 0:                                     # fall-back guard
+            L_pool = 1e6
 
+        # Only earn when current price is inside our chosen band
+        if not (self.lower_price <= P_t <= self.upper_price):
+            # still hold inventory but no fees / price impact
+            self.position_value = self.token0_in_pool * P_t + self.token1_in_pool
             return 0.0
-        
-        # Simulation of pool reaction to swap volume: assumption that a fraction of volume is trading with pool
-        total_liq  = current_row["liquidity"] or 1e18 
-        pool_share = np.clip(self.liquidity_in_pool / total_liq, 0, 1)
-        volume_traded = current_row['volume'] * pool_share      # Approximation
-        token0_in = volume_traded / current_price_market        # Approximation
 
-        p_before = self.sqrt_price_pool
-        L = 1e6         # Liquidity Param
-        p_final, avg_exec = simulate_swap(token0_in, p_before, L)
-        self.sqrt_price_pool = p_final
+        # Simulate swap flow hitting *our* share of the pool
+        pool_share = np.clip(self.position_value / (P_t * L_pool * 2), 0, 1)
+        volume_usd = cur_row["volume"] * pool_share            # crude share
+        dx_token0 = volume_usd / P_t                          # token0 in
 
-        # TRADING FEES: if the price is in the chose interval, earn fees
-        # TODO: simplification compared to Uniswap V3
-        fee_tier = 0.0005          # 0.05 % ≈ popular ETH/USDC pool
-        fees_earned = fee_tier * volume_traded
+        fee_tier = 0.0005
+        sqrtP_new, dy_token1, fee_token0 = simulate_swap(dx_token0, sqrtP_t, L=L_pool, fee_tier=fee_tier)
 
-        # IMPERMANENT LOSS FROM PRICE MOVEMENT
-        # TODO: simplification compared to Uniswap V3
-        price_change_fraction = (next_price_market - current_price_market) / current_price_market
-        position_value_change = self.liquidity_in_pool * price_change_fraction
+        # update internal “pool price” reference 
+        self.sqrt_price_pool = sqrtP_new
 
-        
-        delta_pool_value = fees_earned + position_value_change
-        self.liquidity_in_pool = np.clip(
-            self.liquidity_in_pool + delta_pool_value,
-            0,
-            10 * self.initial_balance
-        )
-        self.position_value = self.liquidity_in_pool
+        # Update our token balances
+        self.token0_in_pool += dx_token0 + fee_token0   # got token0 from trader + fees
+        self.token1_in_pool -= dy_token1               # paid out token1 to trader
 
-        return delta_pool_value
+        # Value position *after* swap at next-step market price
+        new_value = self.token0_in_pool * P_t1 + self.token1_in_pool    # USD
+        fees_usd = fee_token0 * P_t                                    # fees at trade price
+
+        # Gas cost (USD) – keep constant for now, convert Gwei→USD later
+        gas_cost_usd = self.gas_fee              # placeholder (already USD)
+
+        # Reward
+        reward = (new_value - self.position_value) + fees_usd - gas_cost_usd
+
+        self.position_value = new_value
+        self.total_rewards += reward
+
+        return reward
+
     
     def render(self, mode='human'):
         print(
