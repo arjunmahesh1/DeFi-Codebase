@@ -195,7 +195,7 @@ class UniswapEnv(gym.Env):
 
         # WITHDRAW
         else:
-            portion = abs(frac)
+            portion = abs(fraction)
 
             # withdraw proportionally from BOTH token balances
             token0_out = self.token0_in_pool * portion
