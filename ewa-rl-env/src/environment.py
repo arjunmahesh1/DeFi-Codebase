@@ -12,21 +12,26 @@ def tick_to_price(tick):
 def price_to_tick(price):
     return int(math.log(price, 1.0001))
 
-def simulate_swap(delta_x, sqrt_price, L):
+def simulate_swap(delta_x, sqrt_price, L, fee_tier=0.0005):
     """
     Bonding Curve: p' = (sqrt(p) + delta_x / L)^2
     return final price p', average execution price, tokens_in, tokens_out, etc.
+    Exact-input token0 swap.
+    Returns: sqrt_p_new, delta_y, fee_x
     """
-    sqrt_p_initial = sqrt_price
-    sqrt_p_final = sqrt_p_initial + (delta_x / L)
-    if sqrt_p_final <= 0:
-        sqrt_p_final = 1e-9
-    
-    p_final = sqrt_p_final**2
-    avg_price = (sqrt_p_initial + sqrt_p_final) / 2.0       # Approximation: for a small delta_x, avg = near midpoint
-                                                            # Integral Approach: integral p dp from sqrt_p_initial to sqrt_p_final
+    # fees skimmed off upfront
+    fee_x = delta_x * fee_tier
+    delta_x_post = delta_x - fee_x
 
-    return p_final, avg_price
+    # Calculate the new price
+    numerator = L * sqrt_price
+    denominator = L + delta_x_post * sqrt_price
+    sqrt_price_new = numerator / denominator
+
+    # token1 out (delta_y > 0 means pool pays out token1)
+    delta_y = L * (sqrt_price - sqrt_price_new)
+
+    return sqrt_price_new, delta_y, fee_x
 
 class UniswapEnv(gym.Env):
     def __init__(
